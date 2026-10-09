@@ -39,23 +39,36 @@ const fishHook = `
     end;
 
     function __direnv_update_fish_complete_path;
-        # Remove previously added completion paths
-        for p in $__direnv_fish_complete_paths;
-            set -l idx (contains -i -- $p $fish_complete_path);
-            and set -e fish_complete_path[$idx];
-        end;
-        set -e __direnv_fish_complete_paths;
-
-        # Add completion paths from current XDG_DATA_DIRS
+        # Completion paths that should be present for the current XDG_DATA_DIRS.
+        # Trailing slashes are stripped so the entries match the ones fish
+        # builds itself at startup (/usr/share/ -> /usr/share/fish/vendor_completions.d).
+        set -l wanted;
         for dir in (string split ':' -- $XDG_DATA_DIRS);
-            set -l completions_dir "$dir/fish/vendor_completions.d";
+            set -l completions_dir (string replace -r -- '/+$' '' $dir)"/fish/vendor_completions.d";
             if test -d "$completions_dir";
-                if not contains -- "$completions_dir" $fish_complete_path;
-                    set -ga fish_complete_path $completions_dir;
-                    set -ga __direnv_fish_complete_paths $completions_dir;
-                end;
+                set -a wanted $completions_dir;
             end;
         end;
+
+        # Only touch fish_complete_path when something actually changed:
+        # fish drops already loaded completions whenever it is modified.
+        for p in $__direnv_fish_complete_paths;
+            if not contains -- $p $wanted;
+                set -l idx (contains -i -- $p $fish_complete_path);
+                and set -e fish_complete_path[$idx];
+            end;
+        end;
+
+        set -l added;
+        for completions_dir in $wanted;
+            if contains -- $completions_dir $__direnv_fish_complete_paths;
+                set -a added $completions_dir;
+            else if not contains -- $completions_dir $fish_complete_path;
+                set -ga fish_complete_path $completions_dir;
+                set -a added $completions_dir;
+            end;
+        end;
+        set -g __direnv_fish_complete_paths $added;
     end;
 `
 

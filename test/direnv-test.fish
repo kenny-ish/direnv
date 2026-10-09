@@ -263,6 +263,35 @@ begin
         echo "FAILED: completions_dir not added to fish_complete_path after direnv_eval"
         exit 1
     end
+
+    # fish only loads completions for commands that exist
+    function __direnv_test_cmd
+    end
+
+    echo "Verify completions from the added path are loaded"
+    if not string match -q -- '--direnv-option*' (complete -C "__direnv_test_cmd --direnv")
+        echo "FAILED: completions from completions_dir were not loaded"
+        exit 1
+    end
+
+    echo "Verify re-evaluating without changes keeps loaded completions"
+    direnv_eval
+    if not string match -q -- '--direnv-option*' (complete -C "__direnv_test_cmd --direnv")
+        echo "FAILED: loaded completions were lost after a no-op direnv_eval"
+        exit 1
+    end
+
+    echo "Verify trailing slashes in XDG_DATA_DIRS do not produce duplicate entries"
+    set -gx XDG_DATA_DIRS "$TEST_DIR/scenarios/fish-completions/data/"
+    __direnv_update_fish_complete_path
+    if contains -- "$TEST_DIR/scenarios/fish-completions/data//fish/vendor_completions.d" $fish_complete_path
+        echo "FAILED: fish_complete_path contains an entry with a double slash"
+        exit 1
+    end
+    if not contains -- $completions_dir $fish_complete_path
+        echo "FAILED: completions_dir removed from fish_complete_path after trailing slash update"
+        exit 1
+    end
 end
 test_stop
 
